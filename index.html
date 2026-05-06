@@ -638,6 +638,32 @@ input { font-family: inherit; }
 @media (min-width: 500px) {
   .bot-nav { border-radius: 0; }
 }
+
+/* ===== FRIEND MANAGE ROWS ===== */
+.friend-row {
+  background: var(--white); border-radius: var(--r-md);
+  padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+  box-shadow: var(--shadow-sm); margin-bottom: 8px;
+  animation: fadeSlideUp 0.25s ease;
+}
+.fr-av { font-size: 28px; flex-shrink: 0; }
+.fr-info { flex: 1; }
+.fr-name { font-size: 14px; font-weight: 800; }
+.fr-stats { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.fr-del {
+  width: 30px; height: 30px; border-radius: 50%;
+  background: #FEE2E2; color: #EF4444;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; cursor: pointer; transition: all 0.15s; flex-shrink: 0;
+}
+.fr-del:active { background: #FCA5A5; transform: scale(0.9); }
+.friends-empty {
+  text-align: center; padding: 24px 16px;
+  color: var(--muted); font-size: 13px;
+  background: var(--white); border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+.fe-ico { font-size: 36px; display: block; margin-bottom: 8px; }
 </style>
 </head>
 <body>
@@ -802,6 +828,12 @@ input { font-family: inherit; }
         </div>
       </div>
 
+      <div class="sec-hdr">
+        <div class="sec-title">👭 Amigas do grupo</div>
+        <div class="sec-action" onclick="openMod('mod-friend')">+ Adicionar</div>
+      </div>
+      <div id="friends-manage-list" style="margin-bottom:14px"></div>
+
       <div class="sec-hdr"><div class="sec-title">🔗 Compartilhar grupo</div></div>
       <div class="invite-box" onclick="copyLink()">
         <div class="ib-ico">📎</div>
@@ -883,6 +915,38 @@ input { font-family: inherit; }
   </div>
 </div>
 
+
+<!-- Add friend modal -->
+<div class="modal-bg" id="mod-friend" onclick="closeMod('mod-friend')">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <span class="modal-ico">👭</span>
+    <div class="modal-title">Adicionar Amiga</div>
+    <div class="modal-desc">Adicione uma amiga ao grupo para acompanhar juntas!</div>
+    <div class="field" style="text-align:left">
+      <label>Nome</label>
+      <input type="text" id="inp-friend-name" placeholder="Nome da amiga" maxlength="20">
+    </div>
+    <div class="field" style="text-align:left">
+      <label>Avatar</label>
+      <div class="avatar-grid" id="friend-av-grid" style="margin-top:6px">
+        <div class="av-opt sel" data-v="🌺">🌺</div>
+        <div class="av-opt" data-v="🦋">🦋</div>
+        <div class="av-opt" data-v="⭐">⭐</div>
+        <div class="av-opt" data-v="🌸">🌸</div>
+        <div class="av-opt" data-v="🌻">🌻</div>
+        <div class="av-opt" data-v="🌈">🌈</div>
+        <div class="av-opt" data-v="🦄">🦄</div>
+        <div class="av-opt" data-v="💎">💎</div>
+        <div class="av-opt" data-v="🧸">🧸</div>
+        <div class="av-opt" data-v="🌞">🌞</div>
+        <div class="av-opt" data-v="🐍">🐍</div>
+        <div class="av-opt" data-v="🐼">🐼</div>
+      </div>
+    </div>
+    <button class="btn-main" onclick="saveFriend()" style="margin-top:6px">Adicionar 💚</button>
+    <button onclick="closeMod('mod-friend')" style="margin-top:10px;color:var(--muted);font-size:13px;width:100%;padding:6px">Cancelar</button>
+  </div>
+</div>
 <div id="toast"></div>
 
 <script>
@@ -911,12 +975,7 @@ const DEF_HABITS = [
   { id:'gut',      name:'Intestino Funcionando', icon:'🌿', pts:10, clr:'#A5D6A7' },
 ];
 
-const FRIENDS = [
-  { id:'f1', name:'Ana',  av:'👩‍🦰', streak:12, wPts:280, todPts:45, td:[true,true,true,true,false]  },
-  { id:'f2', name:'Bela', av:'⭐',  streak:7,  wPts:215, todPts:30, td:[true,true,false,true,false]  },
-  { id:'f3', name:'Cris', av:'🌺',  streak:3,  wPts:190, todPts:25, td:[true,false,false,true,false] },
-  { id:'f4', name:'Dani', av:'🦋',  streak:5,  wPts:230, todPts:35, td:[true,true,false,false,true]  },
-];
+// Friends stored in S.friends (dynamic)
 
 const BADGES = [
   { id:'first',   ico:'🌱', name:'Primeiro Passo',    desc:'Completou o 1º hábito',        ok:s=>s.done>=1         },
@@ -940,6 +999,7 @@ let S = {
   user:       null,
   checkins:   {},    // { 'YYYY-MM-DD': ['habitId',...] }
   custom:     [],    // extra habits
+  friends:    [],    // dynamic friends list
   likes:      {},    // { feedId: bool }
   notifBdgs:  [],    // badge ids already shown
 };
@@ -1005,7 +1065,7 @@ function weekData() {
 function rankData(period='today') {
   const myP = period==='today' ? todayPts() : (period==='week' ? totalPts() : totalPts()*4);
   const me = { id:'me', name:S.user.name, av:S.user.avatar, streak:calcStreak(), pts:myP, isMe:true };
-  const friends = FRIENDS.map(f=>({
+  const friends = S.friends.map(f=>({
     id:f.id, name:f.name, av:f.av, streak:f.streak,
     pts: period==='today' ? f.todPts : (period==='week' ? f.wPts : f.wPts*4),
     isMe:false
@@ -1023,6 +1083,7 @@ function save() {
     localStorage.setItem('vv_user',    JSON.stringify(S.user));
     localStorage.setItem('vv_ci',      JSON.stringify(S.checkins));
     localStorage.setItem('vv_custom',  JSON.stringify(S.custom));
+    localStorage.setItem('vv_friends', JSON.stringify(S.friends));
     localStorage.setItem('vv_likes',   JSON.stringify(S.likes));
     localStorage.setItem('vv_notif',   JSON.stringify(S.notifBdgs));
   } catch(e) {}
@@ -1035,6 +1096,8 @@ function load() {
     if(ci) S.checkins=JSON.parse(ci);
     const c=localStorage.getItem('vv_custom');
     if(c) S.custom=JSON.parse(c);
+    const fr=localStorage.getItem('vv_friends');
+    if(fr) S.friends=JSON.parse(fr);
     const l=localStorage.getItem('vv_likes');
     if(l) S.likes=JSON.parse(l);
     const n=localStorage.getItem('vv_notif');
@@ -1186,6 +1249,10 @@ function floatPts(txt, el) {
 function renderMiniRank() {
   const all=rankData('today'); const max=all[0]?.pts||1;
   const wrap=document.getElementById('mini-rank'); wrap.innerHTML='';
+  if(all.length<=1) {
+    wrap.innerHTML='<div style="text-align:center;color:var(--muted);font-size:13px;padding:12px 0">🤝 Adicione amigas no Perfil para ver o ranking!</div>';
+    return;
+  }
   all.slice(0,5).forEach((p,i)=>{
     const posC=i<3?` p${i+1}`:'';
     const div=document.createElement('div'); div.className='mini-rank-row';
@@ -1206,8 +1273,8 @@ function renderMembers() {
   const me=document.createElement('div'); me.className='mem-pill';
   me.innerHTML=`<div class="mem-av active">${S.user.avatar}</div><div class="mem-name">Você</div><div class="mem-pct">${mePct}%</div>`;
   wrap.appendChild(me);
-  FRIENDS.forEach(f=>{
-    const done=f.td.filter(Boolean).length, total=f.td.length;
+  S.friends.forEach(f=>{
+    const done=f.td.filter(Boolean).length, total=Math.max(f.td.length,1);
     const el=document.createElement('div'); el.className='mem-pill';
     el.innerHTML=`<div class="mem-av active">${f.av}</div><div class="mem-name">${f.name}</div><div class="mem-pct">${Math.round(done/total*100)}%</div>`;
     wrap.appendChild(el);
@@ -1347,7 +1414,7 @@ function renderDashboard() {
   // Group avg
   const allPcts=[
     todayDone().length/(habits.length||1),
-    ...FRIENDS.map(f=>f.td.filter(Boolean).length/f.td.length)
+    ...S.friends.map(f=>f.td.filter(Boolean).length/Math.max(f.td.length,1))
   ];
   const avg=Math.round(allPcts.reduce((a,b)=>a+b,0)/allPcts.length*100);
   document.getElementById('grp-avg').innerHTML=`
@@ -1362,7 +1429,7 @@ function renderDashboard() {
   // Best/worst habit group
   const counts=habits.map(h=>{
     const idx=DEF_HABITS.findIndex(dh=>dh.id===h.id);
-    const fCount=FRIENDS.filter(f=>idx>=0&&f.td[idx]).length;
+    const fCount=S.friends.filter(f=>idx>=0&&f.td[idx]).length;
     return { h, cnt:fCount+(todayDone().includes(h.id)?1:0) };
   });
   counts.sort((a,b)=>b.cnt-a.cnt);
@@ -1403,13 +1470,13 @@ function renderFeed() {
     });
   }
 
-  FRIENDS.forEach((f,i)=>{
+  S.friends.forEach((f,i)=>{
     const doneH=DEF_HABITS.filter((_,idx)=>f.td[idx]).map(h=>`${h.icon} ${h.name}`);
     items.push({
       id:'f_'+f.id, av:f.av, who:f.name,
       msg:FEED_TMPL[i%FEED_TMPL.length](f),
-      tags:i===0?doneH:[], time:`Há ${[23,1,2,3,5][i]} ${i===0?'min':'h'}`,
-      baseLikes:[8,3,5,2,9][i]
+      tags:i===0?doneH:[], time:`Há ${[23,1,2,3,5][i]||1} ${i===0?'min':'h'}`,
+      baseLikes:[8,3,5,2,9][i]||2
     });
   });
 
@@ -1466,6 +1533,7 @@ function renderProfile() {
   document.getElementById('p-pts').textContent=st.totalPts;
   document.getElementById('p-str').textContent=`${st.streak}🔥`;
   document.getElementById('p-bdg').textContent=unlockedBadges().length;
+  renderFriendsManage();
 }
 
 function copyLink() {
@@ -1523,6 +1591,92 @@ function showBadge(badge) {
   document.getElementById('mb-title').textContent=`🎉 ${badge.name}!`;
   document.getElementById('mb-desc').textContent=badge.desc;
   openMod('mod-badge');
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  FRIENDS MANAGEMENT
+// ════════════════════════════════════════════════════════════
+
+let selFriendAv = '🌺';
+
+document.getElementById('friend-av-grid').addEventListener('click', e => {
+  const o = e.target.closest('.av-opt'); if (!o) return;
+  document.querySelectorAll('#friend-av-grid .av-opt').forEach(x => x.classList.remove('sel'));
+  o.classList.add('sel'); selFriendAv = o.dataset.v;
+});
+
+function makeFriendStats() {
+  // Generate plausible simulated stats for a new friend
+  const streak = Math.floor(Math.random() * 10) + 1;
+  const todPts = [10, 20, 25, 30, 35, 40, 45][Math.floor(Math.random() * 7)];
+  const wPts = todPts * 5 + Math.floor(Math.random() * 40);
+  const numHabits = DEF_HABITS.length + S.custom.length;
+  const td = Array.from({length: numHabits}, () => Math.random() > 0.45);
+  return { streak, todPts, wPts, td };
+}
+
+function saveFriend() {
+  const n = document.getElementById('inp-friend-name').value.trim();
+  if (!n) { toast('Digite o nome da amiga! 😊'); return; }
+  if (S.friends.some(f => f.name.toLowerCase() === n.toLowerCase())) {
+    toast('Essa amiga já está no grupo! 😉'); return;
+  }
+  const stats = makeFriendStats();
+  const friend = {
+    id: 'f_' + Date.now(),
+    name: n,
+    av: selFriendAv,
+    ...stats
+  };
+  S.friends.push(friend);
+  save();
+  closeMod('mod-friend');
+  document.getElementById('inp-friend-name').value = '';
+  // reset avatar selection
+  document.querySelectorAll('#friend-av-grid .av-opt').forEach(x => x.classList.remove('sel'));
+  document.querySelector('#friend-av-grid .av-opt').classList.add('sel');
+  selFriendAv = '🌺';
+  renderProfile();
+  renderHome();
+  toast('💚 ' + n + ' adicionada ao grupo!');
+}
+
+function removeFriend(id) {
+  const f = S.friends.find(x => x.id === id);
+  if (!f) return;
+  if (!confirm('Remover ' + f.name + ' do grupo?')) return;
+  S.friends = S.friends.filter(x => x.id !== id);
+  save();
+  renderProfile();
+  renderHome();
+  toast('👋 ' + f.name + ' removida do grupo.');
+}
+
+function renderFriendsManage() {
+  const wrap = document.getElementById('friends-manage-list');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  if (!S.friends.length) {
+    wrap.innerHTML = `<div class="friends-empty">
+      <span class="fe-ico">🤝</span>
+      Nenhuma amiga no grupo ainda.<br>Toque em <strong>+ Adicionar</strong> para convidar!
+    </div>`;
+    return;
+  }
+  S.friends.forEach(f => {
+    const div = document.createElement('div'); div.className = 'friend-row';
+    const done = f.td.filter(Boolean).length;
+    const total = Math.max(f.td.length, 1);
+    div.innerHTML = `
+      <div class="fr-av">${f.av}</div>
+      <div class="fr-info">
+        <div class="fr-name">${f.name}</div>
+        <div class="fr-stats">🔥 ${f.streak} dias · ${Math.round(done/total*100)}% hoje · ${f.wPts} pts na semana</div>
+      </div>
+      <div class="fr-del" onclick="removeFriend('${f.id}')">✕</div>`;
+    wrap.appendChild(div);
+  });
 }
 
 // ════════════════════════════════════════════════════════════
